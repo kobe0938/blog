@@ -6,7 +6,7 @@ Over the last few months, [Claude Code](https://www.claude.com/product/claude-co
 
 Unlike ***cloud-only agents*** whose internals remain hidden behind API gateways like [Perplexity](https://www.perplexity.ai/api-platform), [Devin](https://devin.ai/), or [Manus](https://manus.im/), nor as fully ***open source agents*** like [Mini SWE Agent](https://github.com/SWE-agent/mini-swe-agent) or [Terminus 2](https://github.com/laude-institute/harbor/blob/main/src/harbor/agents/terminus_2/terminus_2.py) where you can deploy locally with source code, Claude Code runs ***partially locally*** — it has a open-sourced [client repo](https://github.com/anthropics/claude-code) running on the local machine, which gives us a rare opportunity: to inject the traffic it sends and reverse engineering **to see every single LLM call**, every intermediate **tool invocation**, every tiny decision the agent makes.
 
-Recently, we ran a tiny one-shot experiment with Claude Code and captured everything into a **raw** log file: [**`claude_code_trace.jsonl`**](https://github.com/kobe0938/blog/blob/master/claude-code/claude_code_trace.jsonl). If you put this into the [visualizer](https://v0-llm-agent-dashboard.vercel.app/), you can see the trace. In total, it invokes 92 llm calls(#1-#92), consumes ~2M input tokens in total and lasts for 13 minutes. The total prefix reuse rate is 92%.
+Recently, we ran a tiny one-shot experiment(one random task from the [SWE-bench_Verified](https://huggingface.co/datasets/princeton-nlp/SWE-bench_Verified) dataset) with Claude Code and captured everything into a **raw** log file: [**`claude_code_trace.jsonl`**](https://github.com/kobe0938/blog/blob/master/claude-code/claude_code_trace.jsonl). If you put this into the [visualizer](https://v0-llm-agent-dashboard.vercel.app/), you can see the trace. In total, it invokes 92 llm calls(#1-#92), consumes ~2M input tokens in total and lasts for 13 minutes. The total prefix reuse rate is 92%.
 
 ![](assets/visualizer-screenshot.png)
 
@@ -26,7 +26,7 @@ This is our walk-through of that trace.
 
 Claude Code feels straightforward as a product — you type a request in your editor, it edits files or runs some bash commands. But under the hood, even a simple one-step request decomposes into a surprisingly structured internal loop.
 
-We randomly select one [task](https://huggingface.co/datasets/princeton-nlp/SWE-bench_Verified/viewer/default/test?views%5B%5D=test&row=80) from the [SWE-bench_Verified](https://huggingface.co/datasets/princeton-nlp/SWE-bench_Verified) dataset. The problem set up is to fix one problem in the django/django repo from commit 2e0f04507b17362239ba49830d26fec504d46978. The problem statement is:
+We randomly select one [task](https://huggingface.co/datasets/princeton-nlp/SWE-bench_Verified/viewer/default/test?views%5B%5D=test&row=80)(#80) from the [SWE-bench_Verified](https://huggingface.co/datasets/princeton-nlp/SWE-bench_Verified) dataset. The problem set up is to fix one problem in the django/django repo from commit 2e0f04507b17362239ba49830d26fec504d46978. The problem statement is:
 
 > *"JSONField are not properly displayed in admin when they are readonly.
 > Description
@@ -52,6 +52,7 @@ Interestingly, the Explore subagent(*#7*) is not the only subagent that Claude C
 Finally, after the slowest Explore subagents finished its exploration at step #45, at step #46, the main agent appends the findings(summerizations) from all 3 Explore subagents to the context, and then invokes the Plan subagent(#47) to plan the fix.
 
 ---
+
 ![](assets/20251221_141623_trace47-72.png)
 
 Similar to Explore Agent, Plan Agent(#47) also has a different system prompt, where it's main goal is to plan the fix:
@@ -68,6 +69,7 @@ The plan agent did not carry all the context from the main agent nor the Explore
 > 4. Recommends the best approach given Django's architecture
 
 ---
+
 ![](assets/20251221_141623_trace73-92.png)
 Similarly, the plan agent also follows the ReAct pattern and loop the tool calling from #47 to #72, where the context accumulates from 11,552 tokens to 38,819 tokens. After having a good plan(see details in #72 about the plan), the plan agent will return to the main agent(#73) with the plan. The main agent will then invoke a series of tool calls to review the plan(#73), ask user for clarification(#74), and write the plan into a md file(#75). Finally, the main agent will exit the plan mode(#76) and enter the execute mode(#77) to execute the plan after interactively ask user for plan approval(#76-#77).
 
@@ -90,12 +92,12 @@ During our trace analysis, one phenomenon was so consistent it deserves its own 
 
 Prefix reuse means that one part of the prompt prefix is seen in the previous prompts' prefix. Across all phases, the prompt reuse rate is extremely high: 92%. For ReAct based subagent loops, it's even higher. If we run prefix-length analysis in paticular sections:
 
-| Call    | Total tokens | Shared prefix % | Notes %                    |
-| ------- | ------------ | --------------- | -------------------------- |
-| #1-#6   | 47177        | 0.22%           | Warm up and initial phase  |
-| #7-#45  | 546104       | 92.06%          | Explore subagent phase     |
-| #47-#72 | 528286       | 93.23%          | Plan subagent phase        |
-| #73-#92 | 827411       | 97.83%          | Main agent execution phase |
+| Trace id | Total tokens | Shared prefix % | Notes                      |
+| -------- | ------------ | --------------- | -------------------------- |
+| #1-#6    | 47177        | 0.22%           | Warm up and initial phase  |
+| #7-#45   | 546104       | 92.06%          | Explore subagent phase     |
+| #47-#72  | 528286       | 93.23%          | Plan subagent phase        |
+| #73-#92  | 827411       | 97.83%          | Main agent execution phase |
 
 What does this mean? Claude Code’s architecture practically **optimizes itself for KV cache reusage** , even without explicitly trying.
 
@@ -107,14 +109,21 @@ At the heart of Large Language Model inference lies the **KV cache** (key-value 
 
 To put this in perspective with Claude Code's 92% prefix reuse pattern: processing 2M input tokens(our consumption for the experiment) **without caching** would cost **$6.00** (2M × $3/MTok), but **with prefix caching**, the cost drops to just **$1.152** (1.84M cache hits × $0.30/MTok + 0.16M cache writes × $3.75/MTok) — a savings of **$4.85 (81% reduction)** over one simple task.
 
-Open-source inference engines have also embraced this paradigm: [vLLM&#39;s automatic prefix caching](https://docs.vllm.ai/en/latest/design/automatic_prefix_caching.html) transparently caches shared prefixes using its PagedAttention mechanism, [SGLang&#39;s RadixAttention](https://docs.sglang.io/) employs a radix tree data structure to efficiently match and reuse the longest common prefixes across requests, and [LMCache](https://lmcache.ai/) takes distributed KV caching even further by pooling cache storage across multiple nodes to maximize reuse at scale. Beyond cost savings, prefix cache hits dramatically reduce **TTFT (time to first token)** — since the model can skip recomputing the entire prefix and only process the unique suffix, latency for subsequent requests with shared context can drop by 5-10x, making conversational agents and document-grounded applications far more responsive.---
+Open-source inference engines have also embraced this paradigm: [vLLM&#39;s automatic prefix caching](https://docs.vllm.ai/en/latest/features/automatic_prefix_caching/) transparently caches shared prefixes using its PagedAttention mechanism, [SGLang&#39;s RadixAttention](https://docs.sglang.io/advanced_features/hicache_best_practices.html) employs a radix tree data structure to efficiently match and reuse the longest common prefixes across requests, and [LMCache](https://github.com/LMCache/lmcache) takes distributed KV caching even further by pooling cache storage across multiple nodes to maximize reuse at scale. Beyond cost savings, prefix cache hits dramatically reduce **TTFT (time to first token)** — since the model can skip recomputing the entire prefix and only process the unique suffix, latency for subsequent requests with shared context can drop by 5-10x, making conversational agents and document-grounded applications far more responsive.---
 
 # **4. What We Learned from This Tiny Trace**
 
 Even though the task was trivial, the trace reveals a lot about Claude Code as a system:
 
----
+* **Claude Code is built around specialized subagents with focused responsibilities.** The main agent doesn't try to do everything — instead, it delegates to specialized subagents. This separation of concerns allows each subagent to operate with a clean context and focused subtasks, rather than carrying the full conversation history in order to avoid context bloat.
+* **Parallel subagent execution is a core architectural pattern.** Claude Code doesn't explore sequentially — it spawns multiple Explore subagents in parallel with different search goals. Main agent/each subagent can invoke 1-3 tools in parallel within its own ReAct loop, maximizing exploration efficiency while maintaining isolation.
+* **Context is strategically discarded, not accumulated.** Subagents don't inherit the main agent's full context — they receive only: A fresh system prompt defining their role A summarized task description. This prevents context bloat and keeps each subagent focused. When subagents complete, only their **summarized findings** flow back to the main agent, not their entire execution trace.
+* **The system prompt is huge and comprehensive.** Every agent call reconstructs a massive system prompt containing: Git repository state and history, Complete tool specifications (18 tools for main agent), Conversation history and tool outputs, Execution phase instructions. The main agent's system prompt alone is around 20,000 tokens.
+* **"Warm-up" calls prime the cache before real work begins.** Before tackling the actual task, Claude Code makes seemingly redundant calls (#2, #3, #4) that: Load tool specifications into cache, Prime subagent system prompts, Establish stable prefix baselines. These warm-up steps cost very little (cache write overhead) but dramatically accelerate subsequent subagent invocations through cache hits.
+* **The architecture naturally optimizes for KV cache reuse.** ReAct loops in subagents & main agent maintain stable system prompts while appending tool outputs, Parallel execution causes multiple agents to share common prefix components, Persistent conversation buffer ensures the main agent's context grows incrementally. The result: **92%** overall prefix reuse, with execution phase peaking at **97.83%** — exactly the workload pattern that modern caching systems are designed for, which results in a significant cost savings of $4.85 (81% reduction) over one simple task.
+* **Interactive planning approval creates a natural breakpoint.** The workflow explicitly pauses between planning (#72) and execution (#77) to ask for user approval. This serves multiple purposes: Gives users control over what changes will be made, Creates a checkpoint where the plan can be refined, Allows the system to write the plan to a markdown file that serves as an executable todo list. This design choice prioritizes transparency and user agency over fully autonomous operation.
 
 ---
 
 # **5. Beyond prefix caching: can we do better?**
+Recently, there are some interesting research papers that try to improve the non-prefix caching efficiency, such as (CacheBlend)[https://arxiv.org/abs/2405.16444], where optimizations can be made even on non-prefix(substring) caching. In our trace, we can see that the subagents has a tool list that is a subset of the main agent's tool list, which means that the subagents can reuse the of the main agent's tool list. This is a good example of how to improve the non-prefix caching efficiency. Another senario in our trace is that if the same file was read multiple times, the file content can be cached and reused, even though the file content is not a prefix. This can be extremely helpful when the file content is large and the file is read multiple times.
