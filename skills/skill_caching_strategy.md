@@ -2,13 +2,13 @@
 
 ## Overview
 
-This document describes a strategy for caching skill files (like `SKILL.md` and their referenced files) to enable efficient LLM prompt caching through context editing. By pre-processing and storing skill documentation in the correct format, we can achieve **85%+ cache hit rates** on skill-related content.
+This document describes a strategy for caching !skills[https://www.anthropic.com/engineering/equipping-agents-for-the-real-world-with-agent-skills] files (like `SKILL.md` and their referenced files) to enable efficient LLM prompt caching through context editing. By pre-processing and storing skill documentation in the correct format, we can achieve **85%+ cache hit rates** on skill-related content.
 
 ![Skill Caching Flow](skill_cache_flow.svg)
 
 ## Problem Statement
 
-When LLM agents use skill files (e.g., PDF processing skills), the skill documentation is inserted into the user context. Without proper caching:
+When LLM agents use skill files (e.g., ![PDF processing skills](https://github.com/anthropics/skills/blob/main/skills/pdf/SKILL.md)), the skill documentation is inserted into the user context. Without proper caching:
 - Each request re-sends the full skill documentation
 - No prefix matching occurs with previous requests
 - Token costs and latency increase linearly
