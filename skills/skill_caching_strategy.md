@@ -24,11 +24,17 @@ When LLM agents use skill files (e.g., [PDF processing skills](https://github.co
 For each skill, cache the main skill file and all referenced files:
 
 ```
-skills/pdf/
-├── SKILL.md          # Main skill documentation
-├── forms.md          # Referenced: PDF form filling guide
-└── reference.md      # Referenced: Advanced PDF operations
+cache/
+├── skills/
+│   ├── pdf/
+│   │   ├── SKILL.md
+│   │   ├── forms.md
+│   │   └── reference.md
+│   └── another_skill/
+│       └── ...
+└── pool_index.json  # Metadata about cached entries
 ```
+
 ![Skill Caching Flow](skill_cache_flow.svg)
 
 
@@ -48,11 +54,13 @@ Traditional prefix caching requires skill content to appear at the **exact same 
 
 With proper caching, we observed these results on skill-related requests:
 
-| Record | Delta Words | Matched | Hit Rate |
-|--------|-------------|---------|----------|
+| Record | New Content Appended to Prefix | Matched in Pool from New Content Appended(Left) | Hit Rate |
+|--------|------------------------------------------|-------------------------------|----------|
 | forms.md content | 1,752 | 1,490 | **85.0%** |
 | SKILL.md content | 1,315 | 836 | **63.6%** |
 | Plan mode messages | 902 | 603 | **66.9%** |
+
+*Note: "New Content Appended to Prefix" refers to the total number of words in the new content that was appended to the cached prefix. With CacheBlend, this new content can be placed after dynamic content (like user requests) while still achieving cache hits by concatenating pre-computed KV states. "Matched" represents the number of words from skill files that were found in the cache pool and successfully matched, enabling cache hits.*
 
 ![Cache Comparison](skill_cache_comparison.svg)
 
@@ -60,34 +68,7 @@ With proper caching, we observed these results on skill-related requests:
 
 1. **Reduced Token Costs**: 85% of skill content hits cache → only 15% new tokens processed
 2. **Lower Latency**: Cached prefixes enable faster response generation
-3. **Consistent Behavior**: Pre-cached content ensures consistent skill documentation
 
-## Best Practices
-
-### DO:
-- ✅ Cache all skill files and their references
-- ✅ Place skill content early in prompts for maximum prefix matching
-- ✅ Update cache when skill files change
-- ✅ Use consistent prompt structure across requests
-
-### DON'T:
-- ❌ Insert dynamic content before skill documentation
-- ❌ Modify skill content between requests
-- ❌ Split skill files across different parts of the prompt
-
-## File Structure
-
-```
-cache/
-├── skills/
-│   ├── pdf/
-│   │   ├── SKILL.md
-│   │   ├── forms.md
-│   │   └── reference.md
-│   └── other_skills/
-│       └── ...
-└── pool_index.json  # Metadata about cached entries
-```
 
 ## Conclusion
 

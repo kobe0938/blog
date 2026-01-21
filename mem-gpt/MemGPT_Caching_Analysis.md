@@ -97,6 +97,12 @@ CACHEABLE BLOCKS IN MEMGPT
 │  ★ SYSTEM INSTRUCTIONS (~2000 tokens)                   │
 │    Static across ALL turns → 100% reusable              │
 ├─────────────────────────────────────────────────────────┤
+│  ★ WORKING CONTEXT (MOST PARTS)                         │
+│    Recent state reused across turns → mostly reusable   │
+├─────────────────────────────────────────────────────────┤
+│  ★ MESSAGE QUEUE (MOST RECENT MESSAGES)                 │
+│    Recent messages often persist → mostly reusable      │
+├─────────────────────────────────────────────────────────┤
 │  ★ ARCHIVAL DOCUMENTS                                   │
 │    Same doc retrieved multiple times → reusable         │
 │    "The capital of France is Paris..."                  │
@@ -132,7 +138,7 @@ Position 2500-3500:                       Position 4000-5000:
 
 ## Empirical Results: LMCache Agent Trace
 
-he [LMCache MemGPT benchmark results](https://github.com/LMCache/lmcache-agent-trace/tree/main/memgpt_result) demonstrate the dramatic difference:
+The [LMCache MemGPT benchmark results](https://github.com/LMCache/lmcache-agent-trace/tree/main/memgpt_result) demonstrate the dramatic difference:
 
 ![LMCache MemGPT benchmark results](https://raw.githubusercontent.com/LMCache/lmcache-agent-trace/main/memgpt_result/memgpt1.png)
 
