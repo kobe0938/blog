@@ -1,5 +1,13 @@
 # Skill File Caching Strategy for LLM Context Editing
 
+## TL;DR
+
+By pre-caching skill files and using CacheBlend for position-invariant matching, we achieve **63.6-85.0% cache hit rates** on skill-related content—significantly reducing token costs and latency.
+
+![Cache Comparison](skill_cache_comparison.svg)
+
+---
+
 ## Overview
 
 We propose a strategy for caching [skills](https://www.anthropic.com/engineering/equipping-agents-for-the-real-world-with-agent-skills) files (like `SKILL.md` and their referenced files) to enable efficient LLM prompt caching through context editing. By pre-processing and storing skill documentation in the correct format, we can achieve **85%+ cache hit rates** on skill-related content.
