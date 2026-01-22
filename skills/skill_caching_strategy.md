@@ -5,7 +5,15 @@
 We propose a strategy for caching [skills](https://www.anthropic.com/engineering/equipping-agents-for-the-real-world-with-agent-skills) files (like `SKILL.md` and their referenced files) to enable efficient LLM prompt caching through context editing. By pre-processing and storing skill documentation in the correct format, we can achieve **85%+ cache hit rates** on skill-related content.
 
 
-Skill is a progressive disclosure: it provides just enough information in first several lines in skill.md - for Claude to know when each skill should be used without loading all of it into context. The actual body of this file is the second level of detail. If Claude thinks the skill is relevant to the current task, it will load the skill by reading its full SKILL.md into context.
+Skill is a progressive disclosure: it provides just enough information in first several lines in skill.md - for Claude to know when each skill should be used without loading all of it into context. 
+
+| Level | When Loaded | Token Cost | Content |
+| :--- | :--- | :--- | :--- |
+| **Level 1: Metadata** | Always (at startup) | ~100 tokens per Skill | `name` and `description` from YAML frontmatter |
+| **Level 2: Instructions** | When Skill is triggered | Under 5k tokens | `SKILL.md` body with instructions and guidance |
+| **Level 3+: Resources** | As needed | Effectively unlimited | Bundled files executed via bash without loading contents into context |
+
+The actual body of this file is the second level of detail. If Claude thinks the skill is relevant to the current task, it will load the Level 2 by reading its full instructions  SKILL.md into context.
 
 ![Skill Progressive disclosure](https://www.anthropic.com/_next/image?url=https%3A%2F%2Fwww-cdn.anthropic.com%2Fimages%2F4zrzovbb%2Fwebsite%2F191bf5dd4b6f8cfe6f1ebafe6243dd1641ed231c-1650x1069.jpg&w=3840&q=75)
 
@@ -27,12 +35,14 @@ For each skill, cache the main skill file and all referenced files:
 cache/
 ├── skills/
 │   ├── pdf/
-│   │   ├── SKILL.md
-│   │   ├── forms.md
-│   │   └── reference.md
+│   │   ├── SKILL.md (main instructions)
+│   │   ├── forms.md (form-filling guide)
+│   │   ├── reference.md (detailed API reference)
+│   │   └── scripts/
+│   │       └── fill_form.py (utility script)
 │   └── another_skill/
 │       └── ...
-└── pool_index.json  # Metadata about cached entries
+└── pool_index.json (metadata about cached entries)
 ```
 
 ![Skill Caching Flow](skill_cache_flow.svg)
@@ -54,7 +64,7 @@ Traditional prefix caching requires skill content to appear at the **exact same 
 
 With proper caching, we observed these results on skill-related requests:
 
-| Record | New Content Appended to Prefix | Matched in Pool from New Content Appended(Left) | Hit Rate |
+| Record | New Tokens for Next Round | New Tokens hit in Skill Cache Pool | Hit Rate |
 |--------|------------------------------------------|-------------------------------|----------|
 | forms.md content | 1,752 | 1,490 | **85.0%** |
 | SKILL.md content | 1,315 | 836 | **63.6%** |
