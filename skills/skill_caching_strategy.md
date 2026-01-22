@@ -72,6 +72,6 @@ With proper caching, we observed these results on skill-related requests:
 
 ## Conclusion
 
-By pre-caching skill files and structuring prompts for prefix matching, we can achieve significant cache hit rates (65-85%) on skill-related content. This reduces token costs and latency while maintaining consistent skill documentation across requests.
+By pre-caching skill files and structuring prompts for prefix matching, we can achieve significant cache hit rates (63.6-85.0%) on skill-related content. This reduces token costs and latency while maintaining consistent skill documentation across requests.
 
 The key insight is that **prompt structure matters** - placing skill content early and consistently in prompts enables maximum prefix matching and cache efficiency.
